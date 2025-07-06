@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenStudio Settings</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .section h2 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"],
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .form-group input[type="text"]:focus,
+        .form-group input[type="password"]:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            font-weight: normal;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 4px;
+            margin: 20px 0;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .api-key-group {
+            position: relative;
+        }
+
+        .api-key-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .feature-card {
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #f9f9f9;
+        }
+
+        .feature-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .feature-card p {
+            margin: 0;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Dark Theme Styles */
+        .theme-dark {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        .theme-dark .container {
+            background: #2d2d2d;
+        }
+
+        .theme-dark .section {
+            background: #3a3a3a;
+            border-color: #555;
+        }
+
+        .theme-dark .section h2 {
+            color: #e0e0e0;
+            border-color: #667eea;
+        }
+
+        .theme-dark .form-group label {
+            color: #e0e0e0;
+        }
+
+        .theme-dark .form-group input[type="text"],
+        .theme-dark .form-group input[type="password"],
+        .theme-dark .form-group textarea,
+        .theme-dark .form-group select {
+            background: #2d2d2d;
+            border-color: #555;
+            color: #e0e0e0;
+        }
+
+        .theme-dark .form-group input[type="text"]:focus,
+        .theme-dark .form-group input[type="password"]:focus,
+        .theme-dark .form-group textarea:focus,
+        .theme-dark .form-group select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+        }
+
+        .theme-dark .feature-card {
+            background: #2d2d2d;
+            border-color: #555;
+        }
+
+        .theme-dark .feature-card h4 {
+            color: #e0e0e0;
+        }
+
+        .theme-dark .feature-card p {
+            color: #b0b0b0;
+        }
+
+        .theme-dark .help-text {
+            color: #b0b0b0;
+        }
+
+        .theme-dark .status-message.status-success {
+            background: #0f4f3c;
+            color: #4ade80;
+            border-color: #16a085;
+        }
+
+        .theme-dark .status-message.status-error {
+            background: #4f1414;
+            color: #f87171;
+            border-color: #dc2626;
+        }
+
+        .theme-dark .api-key-toggle {
+            background: #555;
+            color: #e0e0e0;
+        }
+
+        .theme-dark .api-key-toggle:hover {
+            background: #666;
+        }
+
+        /* Status Messages */
+        .status-message {
+            display: none;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .status-message.status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-message.status-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>OpenStudio Settings</h1>
+            <p>Configure your YouTube SEO optimization preferences</p>
+        </div>
+
+        <div class="content">
+            <!-- API Configuration Section -->
+            <div class="section">
+                <h2>🔑 API Configuration</h2>
+                
+                <div class="form-group">
+                    <label for="youtube-api-key">YouTube Data API Key</label>
+                    <div class="api-key-group">
+                        <input type="password" id="youtube-api-key" placeholder="Enter your YouTube Data API key">
+                        <button type="button" class="api-key-toggle" data-target="youtube-api-key">Show</button>
+                    </div>
+                    <div class="help-text">
+                        Get your API key from <a href="https://console.developers.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="gemini-api-key">Google Gemini API Key</label>
+                    <div class="api-key-group">
+                        <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key">
+                        <button type="button" class="api-key-toggle" data-target="gemini-api-key">Show</button>
+                    </div>
+                    <div class="help-text">
+                        Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEO Settings Section -->
+            <div class="section">
+                <h2>🎯 SEO Optimization Settings</h2>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="seo-enabled" checked>
+                    <label for="seo-enabled">Enable real-time SEO scoring</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="auto-suggestions" checked>
+                    <label for="auto-suggestions">Show automatic improvement suggestions</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="tag-recommendations">
+                    <label for="tag-recommendations">Enable AI-powered tag recommendations</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="title-optimization">
+                    <label for="title-optimization">Enable title optimization suggestions</label>
+                </div>
+            </div>
+
+            <!-- Analytics Settings Section -->
+            <div class="section">
+                <h2>📊 Analytics & Tracking</h2>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="analytics-tracking" checked>
+                    <label for="analytics-tracking">Track video performance metrics</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="performance-alerts">
+                    <label for="performance-alerts">Enable performance alerts</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="trend-analysis">
+                    <label for="trend-analysis">Analyze content trends</label>
+                </div>
+            </div>
+
+            <!-- UI Preferences Section -->
+            <div class="section">
+                <h2>🎨 Interface Preferences</h2>
+                
+                <div class="form-group">
+                    <label for="theme-select">Theme</label>
+                    <select id="theme-select">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="auto">Auto (System)</option>
+                    </select>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="notifications-enabled" checked>
+                    <label for="notifications-enabled">Enable notifications</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="compact-mode">
+                    <label for="compact-mode">Compact interface mode</label>
+                </div>
+            </div>
+
+            <!-- Features Overview -->
+            <div class="section">
+                <h2>✨ Available Features</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🎥 SEO Scoring</h4>
+                        <p>Real-time analysis of your video's SEO potential based on title, description, and tags.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🏷️ Smart Tags</h4>
+                        <p>AI-powered tag suggestions to improve discoverability and reach.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📈 Performance Tracking</h4>
+                        <p>Monitor your video metrics and get insights on improvement opportunities.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🧠 Content Ideas</h4>
+                        <p>Get trending topic suggestions based on your niche and past performance.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Message -->
+            <div id="status-message" class="status-message"></div>
+
+            <!-- Action Buttons -->
+            <div class="button-group">
+                <button type="button" class="btn btn-primary" id="save-settings">
+                    Save Settings
+                </button>
+                <button type="button" class="btn btn-secondary" id="reset-settings">
+                    Reset to Defaults
+                </button>
+                <button type="button" class="btn btn-secondary" id="export-settings">
+                    Export Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+</html>

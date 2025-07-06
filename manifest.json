@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "OpenStudio",
+  "description": "Enterprise-grade YouTube SEO and channel optimization toolkit for content creators",
+  "version": "1.0.2",
+  "permissions": [
+    "storage", 
+    "activeTab", 
+    "scripting", 
+    "contextMenus"
+  ],
+  "optional_permissions": [
+    "identity"
+  ],
+  "host_permissions": [
+    "https://studio.youtube.com/*",
+    "https://www.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service_worker.js"
+  },
+  "action": {
+    "default_popup": "public/popup.html",
+    "default_icon": {
+      "16": "public/icon16.png",
+      "48": "public/icon48.png",
+      "128": "public/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "public/icon16.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://studio.youtube.com/*"],
+      "js": [
+        "src/config/constants.js",
+        "src/utils/domUtils.js",
+        "src/utils/sanitizer.js",
+        "src/content_scripts/injectStudioUI.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/settings/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline';"
+  }
+}

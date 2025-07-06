@@ -1,0 +1,32 @@
+<!-- OpenStudio Icon SVG - Convert this to PNG at different sizes -->
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8f9fa;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main background -->
+  <circle cx="64" cy="64" r="58" fill="url(#bgGradient)" stroke="#5a6fd8" stroke-width="2"/>
+  
+  <!-- Studio/Analytics icon -->
+  <g transform="translate(32, 28)">
+    <!-- Chart bars representing analytics -->
+    <rect x="8" y="45" width="12" height="25" fill="url(#iconGradient)" rx="2"/>
+    <rect x="25" y="35" width="12" height="35" fill="url(#iconGradient)" rx="2"/>
+    <rect x="42" y="25" width="12" height="45" fill="url(#iconGradient)" rx="2"/>
+    
+    <!-- SEO optimization symbol -->
+    <circle cx="32" cy="15" r="8" fill="none" stroke="url(#iconGradient)" stroke-width="3"/>
+    <path d="M26 15 L32 21 L38 9" stroke="url(#iconGradient)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Small "OS" text at bottom -->
+  <text x="64" y="105" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">OS</text>
+</svg>
