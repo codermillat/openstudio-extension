@@ -39,6 +39,7 @@
         "src/config/constants.js",
         "src/utils/domUtils.js",
         "src/utils/sanitizer.js",
+        "src/utils/fallbackHelper.js",
         "src/content_scripts/injectStudioUI.js"
       ],
       "run_at": "document_idle"

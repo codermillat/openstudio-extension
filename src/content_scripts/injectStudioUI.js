@@ -1,40 +1,37 @@
-(() => {
+(function() {
+'use strict';
+
 /**
  * OpenStudio Content Script - YouTube Studio UI Injection
  * Injects SEO assistant and optimization tools into YouTube Studio pages
- * v1.0.2-enterprise
+ * v1.0.2-enterprise - Fixed with IIFE and robust fallback logic
  */
 
-// Enhanced duplicate injection prevention for enterprise use
-if (typeof window.OpenStudio === 'undefined') {
-    console.error('OpenStudio: Core namespace not loaded - initialization failed');
-    throw new Error('OpenStudio core dependencies not loaded');
-}
-
-if (window.OpenStudio.State && window.OpenStudio.State.isInjected) {
-    console.log('OpenStudio: Content script already initialized, skipping');
+// Prevent duplicate injection
+if (window.openStudioInjected) {
+    console.log('OpenStudio: Content script already loaded, skipping');
     return;
 }
+window.openStudioInjected = true;
 
-// Global state in namespace
-if (typeof window.OpenStudio.State === 'undefined') {
-    window.OpenStudio.State = {
-        isInjected: false,
-        currentPage: null,
-        seoPanel: null,
-        observer: null,
-        retryCount: 0
-    };
-}
+// Local state management (scoped to IIFE)
+const state = {
+    isInjected: false,
+    currentPage: null,
+    seoPanel: null,
+    observer: null,
+    retryCount: 0
+};
 
-// Initialize content script with enterprise-grade error handling
+// Initialize content script with comprehensive error handling
 function initializeContentScript() {
     try {
         console.log('OpenStudio: Initializing content script v1.0.2-enterprise');
         
-        // Verify required dependencies
-        if (!window.OpenStudio.DOM || !window.OpenStudio.SELECTORS) {
-            throw new Error('Required OpenStudio dependencies not loaded');
+        // Verify required dependencies with fallbacks
+        if (!window.OpenStudio) {
+            console.warn('OpenStudio: Core namespace not loaded, using minimal fallback');
+            setupMinimalOpenStudio();
         }
         
         // Detect current page type
@@ -50,7 +47,7 @@ function initializeContentScript() {
         setupMessageListener();
         
         // Mark as successfully initialized
-        window.OpenStudio.State.isInjected = true;
+        state.isInjected = true;
         console.log('OpenStudio: Content script initialized successfully');
         
     } catch (error) {
@@ -58,10 +55,8 @@ function initializeContentScript() {
         
         // Attempt graceful degradation
         try {
-            if (window.OpenStudio && window.OpenStudio.State) {
-                window.OpenStudio.State.isInjected = false;
-                window.OpenStudio.State.currentPage = 'error';
-            }
+            state.isInjected = false;
+            state.currentPage = 'error';
         } catch (recoveryError) {
             console.error('OpenStudio: Recovery failed:', recoveryError);
         }
@@ -72,6 +67,135 @@ function initializeContentScript() {
 }
 
 /**
+ * Setup minimal OpenStudio namespace if dependencies failed to load
+ */
+function setupMinimalOpenStudio() {
+    window.OpenStudio = window.OpenStudio || {};
+    
+    // Minimal selectors fallback
+    window.OpenStudio.SELECTORS = {
+        VIDEO_TITLE: 'textarea[aria-label*="title" i], #video-title, input[placeholder*="title" i], textarea[placeholder*="title" i]',
+        VIDEO_DESCRIPTION: 'textarea[aria-label*="description" i], #video-description, textarea[placeholder*="description" i]',
+        VIDEO_TAGS: 'input[aria-label*="tags" i], #video-tags, input[placeholder*="tags" i]',
+        MAIN_CONTENT: '.ytcp-main-content, .main-content, main, [role="main"]',
+        VIDEO_EDIT_SIDEBAR: '.ytcp-video-edit-sidebar, .video-edit-sidebar, .sidebar, [data-testid*="sidebar"]'
+    };
+    
+    // Minimal timing fallback
+    window.OpenStudio.TIMING = {
+        TIMEOUT: 10000,
+        RETRY_DELAY: 500,
+        INJECTION_RETRIES: 20,
+        PAGE_CHANGE_DELAY: 1000,
+        SEO_ANALYSIS_DELAY: 500,
+        NOTIFICATION_TIMEOUT: 3000
+    };
+    
+    // Minimal DOM utilities
+    window.OpenStudio.DOM = {
+        createElement: function(tag, attrs, text) {
+            try {
+                const element = document.createElement(tag);
+                if (attrs) {
+                    Object.entries(attrs).forEach(([key, value]) => {
+                        if (key === 'className') {
+                            element.className = value;
+                        } else {
+                            element.setAttribute(key, value);
+                        }
+                    });
+                }
+                if (text) {
+                    element.textContent = text;
+                }
+                return element;
+            } catch (error) {
+                console.error('Failed to create element:', error);
+                return null;
+            }
+        },
+        
+        safeAppendChild: function(parent, child) {
+            try {
+                if (parent && child) {
+                    parent.appendChild(child);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Failed to append child:', error);
+                return false;
+            }
+        },
+        
+        safeQuerySelector: function(selector, parent) {
+            try {
+                return (parent || document).querySelector(selector);
+            } catch (error) {
+                console.error('Query selector failed:', error);
+                return null;
+            }
+        },
+        
+        safeAddEventListener: function(element, event, handler) {
+            try {
+                if (element && typeof handler === 'function') {
+                    element.addEventListener(event, handler);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Failed to add event listener:', error);
+                return false;
+            }
+        },
+        
+        safeRemoveElement: function(element) {
+            try {
+                if (element && element.parentNode) {
+                    element.parentNode.removeChild(element);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Failed to remove element:', error);
+                return false;
+            }
+        },
+        
+        waitForElement: async function(selector, options = {}) {
+            const timeout = options.timeout || 10000;
+            const retryInterval = options.retryInterval || 500;
+            const maxRetries = options.maxRetries || 20;
+            const parent = options.parent || document;
+            
+            let attempts = 0;
+            
+            return new Promise((resolve) => {
+                function checkElement() {
+                    const element = (parent || document).querySelector(selector);
+                    
+                    if (element) {
+                        resolve(element);
+                        return;
+                    }
+                    
+                    attempts++;
+                    if (attempts >= maxRetries) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    setTimeout(checkElement, retryInterval);
+                }
+                
+                checkElement();
+            });
+        }
+    };
+}
+
+/**
  * Detect the current YouTube Studio page type
  */
 function detectPageType() {
@@ -79,22 +203,22 @@ function detectPageType() {
         const url = window.location.href;
         
         if (url.includes('/video/') && url.includes('/edit')) {
-            window.OpenStudio.State.currentPage = 'video-edit';
+            state.currentPage = 'video-edit';
         } else if (url.includes('/create/upload')) {
-            window.OpenStudio.State.currentPage = 'upload';
+            state.currentPage = 'upload';
         } else if (url.includes('/analytics')) {
-            window.OpenStudio.State.currentPage = 'analytics';
+            state.currentPage = 'analytics';
         } else if (url.includes('/dashboard')) {
-            window.OpenStudio.State.currentPage = 'dashboard';
+            state.currentPage = 'dashboard';
         } else {
-            window.OpenStudio.State.currentPage = 'other';
+            state.currentPage = 'other';
         }
         
-        console.log('OpenStudio: Detected page type:', window.OpenStudio.State.currentPage);
+        console.log('OpenStudio: Detected page type:', state.currentPage);
         
     } catch (error) {
         console.error('OpenStudio: Error detecting page type:', error);
-        window.OpenStudio.State.currentPage = 'unknown';
+        state.currentPage = 'unknown';
     }
 }
 
@@ -104,13 +228,13 @@ function detectPageType() {
 function setupPageMonitoring() {
     try {
         // Clean up existing observer
-        if (window.OpenStudio.State.observer) {
-            window.OpenStudio.State.observer.disconnect();
+        if (state.observer) {
+            state.observer.disconnect();
         }
         
         let lastUrl = window.location.href;
         
-        window.OpenStudio.State.observer = new MutationObserver(() => {
+        state.observer = new MutationObserver(() => {
             try {
                 if (window.location.href !== lastUrl) {
                     lastUrl = window.location.href;
@@ -130,7 +254,7 @@ function setupPageMonitoring() {
             }
         });
         
-        window.OpenStudio.State.observer.observe(document.body, {
+        state.observer.observe(document.body, {
             childList: true,
             subtree: true
         });
@@ -192,7 +316,7 @@ function setupMessageListener() {
  */
 async function injectUIForCurrentPage() {
     try {
-        switch (window.OpenStudio.State.currentPage) {
+        switch (state.currentPage) {
             case 'video-edit':
                 await injectVideoEditUI();
                 break;
@@ -206,7 +330,7 @@ async function injectUIForCurrentPage() {
                 await injectDashboardUI();
                 break;
             default:
-                console.log('OpenStudio: No UI injection for page type:', window.OpenStudio.State.currentPage);
+                console.log('OpenStudio: No UI injection for page type:', state.currentPage);
         }
     } catch (error) {
         console.error('OpenStudio: Error injecting UI:', error);
@@ -214,13 +338,13 @@ async function injectUIForCurrentPage() {
 }
 
 /**
- * Inject SEO assistant panel into video edit page with proper retry logic
+ * Inject SEO assistant panel into video edit page with robust field detection
  */
 async function injectVideoEditUI() {
     try {
         console.log('OpenStudio: Attempting to inject video edit UI');
         
-        if (window.OpenStudio.State.isInjected) {
+        if (state.isInjected) {
             console.log('OpenStudio: UI already injected');
             return;
         }
@@ -238,13 +362,15 @@ async function injectVideoEditUI() {
         
         console.log('OpenStudio: Found main container:', container);
         
-        // Try multiple injection locations
+        // Try multiple injection locations with robust selectors
         const injectionTargets = [
             window.OpenStudio.SELECTORS.VIDEO_EDIT_SIDEBAR,
             '.ytcp-video-metadata-editor-sidebar',
             '.ytcp-video-edit-basics-sidebar',
             '.metadata-editor-sidebar',
-            '.video-edit-right-panel'
+            '.video-edit-right-panel',
+            '[data-testid*="sidebar"]',
+            '.ytcp-sidebar'
         ];
         
         let sidebar = null;
@@ -272,14 +398,14 @@ async function injectVideoEditUI() {
         }
         
         // Create and inject SEO assistant panel
-        window.OpenStudio.State.seoPanel = createSEOAssistantPanel();
+        state.seoPanel = createSEOAssistantPanel();
         
-        if (window.OpenStudio.State.seoPanel && window.OpenStudio.DOM.safeAppendChild(sidebar, window.OpenStudio.State.seoPanel)) {
-            window.OpenStudio.State.isInjected = true;
+        if (state.seoPanel && window.OpenStudio.DOM.safeAppendChild(sidebar, state.seoPanel)) {
+            state.isInjected = true;
             console.log('OpenStudio: Video edit UI injected successfully');
             
             // Show success notification
-                            showNotification('SEO Assistant panel injected successfully', 'success');
+            showNotification('✅ SEO Assistant panel injected successfully', 'success');
             
             // Initialize SEO analysis with delay
             setTimeout(() => {
@@ -292,17 +418,396 @@ async function injectVideoEditUI() {
         
     } catch (error) {
         console.error('OpenStudio: Failed to inject video edit UI:', error);
-                    showNotification('Failed to inject SEO Assistant panel', 'error');
+        showNotification('❌ Failed to inject SEO Assistant panel', 'error');
         
         // Reset retry count and try alternative injection
-        window.OpenStudio.State.retryCount++;
-        if (window.OpenStudio.State.retryCount < 3) {
-            console.log('OpenStudio: Retrying injection, attempt:', window.OpenStudio.State.retryCount + 1);
+        state.retryCount++;
+        if (state.retryCount < 3) {
+            console.log('OpenStudio: Retrying injection, attempt:', state.retryCount + 1);
             setTimeout(() => {
                 injectVideoEditUI();
             }, window.OpenStudio.TIMING.RETRY_DELAY * 2);
         }
     }
+}
+
+/**
+ * Get current video data from the page with defensive field detection
+ */
+function getCurrentVideoData() {
+    try {
+        // Enhanced selectors with comprehensive debugging
+        const titleSelectors = [
+            'ytcp-social-suggestion-input input',  // Primary current selector
+            'textarea[aria-label*="title" i]',
+            '#video-title',
+            'input[placeholder*="title" i]',
+            'textarea[placeholder*="title" i]',
+            '[data-testid*="title"] input',
+            '[data-testid*="title"] textarea',
+            '.ytcp-video-title input',
+            '.ytcp-video-title textarea',
+            // Additional comprehensive selectors
+            'input[type="text"]',
+            'textarea',
+            '[contenteditable="true"]',
+            '.ytcp-form-input-container input',
+            '.ytcp-form-input-container textarea'
+        ];
+        
+        const descriptionSelectors = [
+            'ytcp-mention-textbox textarea',  // Primary current selector
+            'textarea[aria-label*="description" i]',
+            '#video-description',
+            'textarea[placeholder*="description" i]',
+            '[data-testid*="description"] textarea',
+            '.ytcp-video-description textarea',
+            'textarea[rows]',
+            // Additional comprehensive selectors
+            'div[contenteditable="true"]',
+            '.ytcp-mention-textbox',
+            '[role="textbox"]'
+        ];
+        
+        const tagSelectors = [
+            'ytcp-form-input-container[internalname="keywords"] input',  // Primary current selector
+            'input[aria-label*="tags" i]',
+            '#video-tags',
+            'input[placeholder*="tags" i]',
+            '[data-testid*="tags"] input',
+            '.ytcp-video-tags input',
+            // Additional comprehensive selectors
+            'input[type="text"][placeholder*="tag" i]',
+            'ytcp-chip-bar input'
+        ];
+
+        console.log('🔍 OpenStudio: Starting field detection debug...');
+        
+        // Debug: Log all available form elements
+        const allInputs = document.querySelectorAll('input, textarea, [contenteditable="true"]');
+        console.log(`🔍 OpenStudio: Found ${allInputs.length} total input/textarea elements on page`);
+        
+        // Try to find title field with detailed logging
+        let titleElement = null;
+        let titleSelectorUsed = null;
+        console.log('🔍 OpenStudio: Searching for title field...');
+        for (let i = 0; i < titleSelectors.length; i++) {
+            const selector = titleSelectors[i];
+            const element = document.querySelector(selector);
+            console.log(`🔍 Title selector ${i + 1}/${titleSelectors.length}: "${selector}" -> ${element ? '✅ FOUND' : '❌ not found'}`);
+            if (element) {
+                titleElement = element;
+                titleSelectorUsed = selector;
+                console.log(`🔍 Title field value: "${element.value || element.textContent || element.innerText || 'EMPTY'}"`);
+                break;
+            }
+        }
+        
+        // Try to find description field with detailed logging
+        let descriptionElement = null;
+        let descriptionSelectorUsed = null;
+        console.log('🔍 OpenStudio: Searching for description field...');
+        for (let i = 0; i < descriptionSelectors.length; i++) {
+            const selector = descriptionSelectors[i];
+            const element = document.querySelector(selector);
+            console.log(`🔍 Description selector ${i + 1}/${descriptionSelectors.length}: "${selector}" -> ${element ? '✅ FOUND' : '❌ not found'}`);
+            if (element) {
+                descriptionElement = element;
+                descriptionSelectorUsed = selector;
+                const content = element.value || element.textContent || element.innerText || 'EMPTY';
+                console.log(`🔍 Description field content: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
+                break;
+            }
+        }
+        
+        // Try to find tags field with detailed logging
+        let tagsElement = null;
+        let tagsSelectorUsed = null;
+        console.log('🔍 OpenStudio: Searching for tags field...');
+        for (let i = 0; i < tagSelectors.length; i++) {
+            const selector = tagSelectors[i];
+            const element = document.querySelector(selector);
+            console.log(`🔍 Tags selector ${i + 1}/${tagSelectors.length}: "${selector}" -> ${element ? '✅ FOUND' : '❌ not found'}`);
+            if (element) {
+                tagsElement = element;
+                tagsSelectorUsed = selector;
+                console.log(`🔍 Tags field value: "${element.value || element.textContent || element.innerText || 'EMPTY'}"`);
+                break;
+            }
+        }
+
+        // Enhanced debugging - show what we actually found
+        console.log('🔍 OpenStudio: Field detection summary:');
+        console.log(`  📝 Title: ${titleElement ? `FOUND with "${titleSelectorUsed}"` : '❌ NOT FOUND'}`);
+        console.log(`  📄 Description: ${descriptionElement ? `FOUND with "${descriptionSelectorUsed}"` : '❌ NOT FOUND'}`);
+        console.log(`  🏷️ Tags: ${tagsElement ? `FOUND with "${tagsSelectorUsed}"` : '❌ NOT FOUND'}`);
+
+        // If no fields found, let's explore the page structure
+        if (!titleElement && !descriptionElement && !tagsElement) {
+            console.log('🔍 OpenStudio: No fields found! Exploring page structure...');
+            
+            // Look for ytcp elements
+            const ytcpElements = document.querySelectorAll('[class*="ytcp"]');
+            console.log(`🔍 Found ${ytcpElements.length} elements with "ytcp" in class name`);
+            
+            // Look for form containers
+            const formContainers = document.querySelectorAll('form, [class*="form"], [class*="input"], [class*="field"]');
+            console.log(`🔍 Found ${formContainers.length} potential form containers`);
+            
+            // Log some form elements for inspection
+            const sampleInputs = Array.from(allInputs).slice(0, 5);
+            sampleInputs.forEach((input, index) => {
+                const classes = input.className || 'no-class';
+                const id = input.id || 'no-id';
+                const placeholder = input.placeholder || 'no-placeholder';
+                const type = input.type || input.tagName.toLowerCase();
+                console.log(`🔍 Sample input ${index + 1}: <${type}> id="${id}" class="${classes}" placeholder="${placeholder}"`);
+            });
+        }
+        
+        // Log warnings for missing fields
+        if (!titleElement) {
+            console.warn('OpenStudio: Missing video title field');
+        }
+        if (!descriptionElement) {
+            console.warn('OpenStudio: Missing video description field');
+        }
+        if (!tagsElement) {
+            console.warn('OpenStudio: Missing video tags field');
+        }
+        
+        return {
+            title: titleElement?.value || titleElement?.textContent || '',
+            description: descriptionElement?.value || descriptionElement?.textContent || '',
+            tags: tagsElement?.value || tagsElement?.textContent || '',
+            url: window.location.href,
+            timestamp: new Date().toISOString(),
+            pageType: state.currentPage,
+            fieldsFound: {
+                title: !!titleElement,
+                description: !!descriptionElement,
+                tags: !!tagsElement
+            }
+        };
+        
+    } catch (error) {
+        console.error('OpenStudio: Error getting video data:', error);
+        return {
+            title: '',
+            description: '',
+            tags: '',
+            url: window.location.href,
+            timestamp: new Date().toISOString(),
+            pageType: state.currentPage,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Generate tag suggestions using AI or fallback
+ */
+async function generateTagSuggestions() {
+    try {
+        showNotification('🏷️ Generating tags...', 'info');
+        
+        const videoData = getCurrentVideoData();
+        if (!videoData.title && !videoData.description) {
+            showNotification('⚠️ No video title or description found. Please refresh or enter content manually.', 'warning');
+            return;
+        }
+        
+        // Send message to background script with proper structure
+        const response = await chrome.runtime.sendMessage({
+            action: 'generateTags',
+            feature: 'tags',
+            videoTitle: videoData.title,
+            data: videoData
+        });
+        
+        if (response && response.success && response.tags) {
+            // Update tags field if available
+            const tagsElement = findTagsField();
+            if (tagsElement) {
+                const currentTags = tagsElement.value || '';
+                const newTags = response.tags.join(', ');
+                const combinedTags = currentTags ? `${currentTags}, ${newTags}` : newTags;
+                
+                tagsElement.value = combinedTags;
+                tagsElement.dispatchEvent(new Event('input', { bubbles: true }));
+                tagsElement.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            
+            // Show appropriate message based on source
+            const message = response.message || `Generated ${response.tags.length} tags successfully!`;
+            const notificationType = response.source === 'ai' ? 'success' : 'info';
+            showNotification(`${notificationType === 'success' ? '✅' : '🧠'} ${message}`, notificationType);
+        } else if (response && response.error) {
+            throw new Error(response.error);
+        } else {
+            throw new Error('Invalid response from background script');
+        }
+        
+    } catch (error) {
+        console.error('OpenStudio: Tag generation failed:', error);
+        const errorMessage = error.message.includes('title') ? 
+            error.message : 
+            'Tag generation failed. Please try again or check your settings.';
+        showNotification(`❌ ${errorMessage}`, 'error');
+    }
+}
+
+/**
+ * Optimize video title using AI or fallback
+ */
+async function optimizeTitle() {
+    try {
+        showNotification('✨ Optimizing title...', 'info');
+        
+        const videoData = getCurrentVideoData();
+        if (!videoData.title) {
+            showNotification('⚠️ No video title found. Please refresh or enter a title manually.', 'warning');
+            return;
+        }
+        
+        const response = await chrome.runtime.sendMessage({
+            action: 'optimizeTitle',
+            feature: 'title',
+            videoTitle: videoData.title,
+            data: videoData
+        });
+        
+        if (response && response.success && response.optimizedTitle) {
+            const titleElement = findTitleField();
+            if (titleElement) {
+                titleElement.value = response.optimizedTitle;
+                titleElement.dispatchEvent(new Event('input', { bubbles: true }));
+                titleElement.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Show appropriate message based on source
+                const message = response.message || 'Title optimized successfully!';
+                const notificationType = response.source === 'ai' ? 'success' : 'info';
+                showNotification(`${notificationType === 'success' ? '✅' : '🧠'} ${message}`, notificationType);
+            }
+        } else if (response && response.error) {
+            throw new Error(response.error);
+        } else {
+            throw new Error('Invalid response from background script');
+        }
+        
+    } catch (error) {
+        console.error('OpenStudio: Title optimization failed:', error);
+        const errorMessage = error.message.includes('title') ? 
+            error.message : 
+            'Title optimization failed. Please try again or check your settings.';
+        showNotification(`❌ ${errorMessage}`, 'error');
+    }
+}
+
+/**
+ * Enhance video description using AI or fallback
+ */
+async function enhanceDescription() {
+    try {
+        showNotification('📝 Enhancing description...', 'info');
+        
+        const videoData = getCurrentVideoData();
+        if (!videoData.title && !videoData.description) {
+            showNotification('⚠️ No video content found. Please refresh or enter content manually.', 'warning');
+            return;
+        }
+        
+        const response = await chrome.runtime.sendMessage({
+            action: 'enhanceDescription',
+            feature: 'description',
+            videoTitle: videoData.title,
+            data: videoData
+        });
+        
+        if (response && response.success && response.enhancedDescription) {
+            const descElement = findDescriptionField();
+            if (descElement) {
+                descElement.value = response.enhancedDescription;
+                descElement.dispatchEvent(new Event('input', { bubbles: true }));
+                descElement.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Show appropriate message based on source
+                const message = response.message || 'Description enhanced successfully!';
+                const notificationType = response.source === 'ai' ? 'success' : 'info';
+                showNotification(`${notificationType === 'success' ? '✅' : '🧠'} ${message}`, notificationType);
+            }
+        } else if (response && response.error) {
+            throw new Error(response.error);
+        } else {
+            throw new Error('Invalid response from background script');
+        }
+        
+    } catch (error) {
+        console.error('OpenStudio: Description enhancement failed:', error);
+        const errorMessage = error.message.includes('title') ? 
+            error.message : 
+            'Description enhancement failed. Please try again or check your settings.';
+        showNotification(`❌ ${errorMessage}`, 'error');
+    }
+}
+
+/**
+ * Find title field with multiple selector attempts
+ */
+function findTitleField() {
+    const selectors = [
+        'ytcp-social-suggestion-input input',  // Primary current selector
+        'textarea[aria-label*="title" i]',
+        '#video-title',
+        'input[placeholder*="title" i]',
+        'textarea[placeholder*="title" i]',
+        '[data-testid*="title"] input',
+        '[data-testid*="title"] textarea'
+    ];
+    
+    for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) return element;
+    }
+    return null;
+}
+
+/**
+ * Find description field with multiple selector attempts
+ */
+function findDescriptionField() {
+    const selectors = [
+        'ytcp-mention-textbox textarea',  // Primary current selector
+        'textarea[aria-label*="description" i]',
+        '#video-description',
+        'textarea[placeholder*="description" i]',
+        '[data-testid*="description"] textarea'
+    ];
+    
+    for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) return element;
+    }
+    return null;
+}
+
+/**
+ * Find tags field with multiple selector attempts
+ */
+function findTagsField() {
+    const selectors = [
+        'ytcp-form-input-container[internalname="keywords"] input',  // Primary current selector
+        'input[aria-label*="tags" i]',
+        '#video-tags',
+        'input[placeholder*="tags" i]',
+        '[data-testid*="tags"] input'
+    ];
+    
+    for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) return element;
+    }
+    return null;
 }
 
 /**
@@ -519,6 +1024,56 @@ function createActionsSection() {
 }
 
 /**
+ * Setup event listeners for panel interactions (CSP-compliant)
+ */
+function setupPanelEventListeners(panel) {
+    try {
+        if (!panel) return;
+        
+        // SEO enabled toggle
+        const toggleSwitch = window.OpenStudio.DOM.safeQuerySelector('#seo-enabled', panel);
+        if (toggleSwitch) {
+            window.OpenStudio.DOM.safeAddEventListener(toggleSwitch, 'change', (e) => {
+                try {
+                    if (e.target.checked) {
+                        initializeSEOAnalysis();
+                    } else {
+                        clearSEOData();
+                    }
+                } catch (error) {
+                    console.error('OpenStudio: Error in toggle handler:', error);
+                }
+            });
+        }
+        
+        // Action buttons with defensive error handling
+        const buttons = [
+            { id: 'generate-tags', handler: generateTagSuggestions },
+            { id: 'optimize-title', handler: optimizeTitle },
+            { id: 'enhance-description', handler: enhanceDescription }
+        ];
+        
+        buttons.forEach(({ id, handler }) => {
+            const button = window.OpenStudio.DOM.safeQuerySelector(`#${id}`, panel);
+            if (button) {
+                window.OpenStudio.DOM.safeAddEventListener(button, 'click', (e) => {
+                    try {
+                        e.preventDefault();
+                        handler();
+                    } catch (error) {
+                        console.error(`OpenStudio: Error in ${id} handler:`, error);
+                        showNotification('❌ Operation failed. Please try again.', 'error');
+                    }
+                });
+            }
+        });
+        
+    } catch (error) {
+        console.error('OpenStudio: Error setting up panel event listeners:', error);
+    }
+}
+
+/**
  * Add CSS styles for the injected panels (CSP-compliant)
  */
 function addPanelStyles() {
@@ -545,6 +1100,7 @@ function addPanelStyles() {
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 font-family: 'YouTube Sans', Roboto, Arial, sans-serif;
                 max-width: 400px;
+                z-index: 10000;
             }
             
             .openstudio-header {
@@ -720,6 +1276,7 @@ function addPanelStyles() {
             .openstudio-notification {
                 font-family: 'YouTube Sans', Roboto, Arial, sans-serif;
                 pointer-events: auto;
+                z-index: 20000;
             }
         `;
         
@@ -731,52 +1288,70 @@ function addPanelStyles() {
 }
 
 /**
- * Setup event listeners for panel interactions (CSP-compliant)
+ * Show notification to user (CSP-compliant) with proper color coding
  */
-function setupPanelEventListeners(panel) {
+function showNotification(message, type = 'info') {
     try {
-        if (!panel) return;
-        
-        // SEO enabled toggle
-        const toggleSwitch = window.OpenStudio.DOM.safeQuerySelector('#seo-enabled', panel);
-        if (toggleSwitch) {
-            window.OpenStudio.DOM.safeAddEventListener(toggleSwitch, 'change', (e) => {
-                try {
-                    if (e.target.checked) {
-                        initializeSEOAnalysis();
-                    } else {
-                        clearSEOData();
-                    }
-                } catch (error) {
-                    console.error('OpenStudio: Error in toggle handler:', error);
-                }
-            });
-        }
-        
-        // Action buttons with defensive error handling
-        const buttons = [
-            { id: 'generate-tags', handler: generateTagSuggestions },
-            { id: 'optimize-title', handler: optimizeTitle },
-            { id: 'enhance-description', handler: enhanceDescription }
-        ];
-        
-        buttons.forEach(({ id, handler }) => {
-            const button = window.OpenStudio.DOM.safeQuerySelector(`#${id}`, panel);
-            if (button) {
-                window.OpenStudio.DOM.safeAddEventListener(button, 'click', (e) => {
-                    try {
-                        e.preventDefault();
-                        handler();
-                    } catch (error) {
-                        console.error(`OpenStudio: Error in ${id} handler:`, error);
-                        showNotification('Operation failed. Please try again.', 'error');
-                    }
-                });
-            }
+        // Remove existing notifications
+        const existingNotifications = document.querySelectorAll('.openstudio-notification');
+        existingNotifications.forEach(notification => {
+            window.OpenStudio.DOM.safeRemoveElement(notification);
         });
         
+        const notification = window.OpenStudio.DOM.createElement('div', {
+            className: `openstudio-notification notification-${type}`
+        }, message);
+        
+        if (!notification) return;
+        
+        // Style the notification
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            padding: '12px 20px',
+            borderRadius: '4px',
+            zIndex: '20000',
+            fontSize: '14px',
+            fontWeight: '500',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+            maxWidth: '300px',
+            wordWrap: 'break-word'
+        });
+        
+        // Set color based on type - Green for AI, Blue for fallback, Red for errors
+        switch (type) {
+            case 'success':
+                notification.style.backgroundColor = '#4caf50';  // Green for AI success
+                notification.style.color = 'white';
+                break;
+            case 'info':
+                notification.style.backgroundColor = '#2196f3';  // Blue for fallback
+                notification.style.color = 'white';
+                break;
+            case 'error':
+                notification.style.backgroundColor = '#f44336';  // Red for errors
+                notification.style.color = 'white';
+                break;
+            case 'warning':
+                notification.style.backgroundColor = '#ff9800';
+                notification.style.color = 'white';
+                break;
+            default:
+                notification.style.backgroundColor = '#2196f3';
+                notification.style.color = 'white';
+        }
+        
+        window.OpenStudio.DOM.safeAppendChild(document.body, notification);
+        
+        // Auto-remove after timeout
+        setTimeout(() => {
+            window.OpenStudio.DOM.safeRemoveElement(notification);
+        }, window.OpenStudio.TIMING.NOTIFICATION_TIMEOUT);
+        
     } catch (error) {
-        console.error('OpenStudio: Error setting up panel event listeners:', error);
+        console.error('OpenStudio: Error showing notification:', error);
+        console.log('OpenStudio:', message);
     }
 }
 
@@ -792,17 +1367,26 @@ async function initializeSEOAnalysis() {
             throw new Error('No video data available');
         }
         
-        // Send data to background for analysis
-        const response = await chrome.runtime.sendMessage({
-            action: 'analyzeVideo',
-            data: videoData
-        });
-        
-        if (response && response.success) {
-            updateSEODisplay(response.analysis);
-            showNotification('SEO analysis completed successfully', 'success');
+        // Use fallback analysis if FallbackHelper is available
+        if (window.OpenStudio && window.OpenStudio.FallbackHelper) {
+            const analysis = window.OpenStudio.FallbackHelper.analyzeSEOScore(
+                videoData.title, 
+                videoData.description, 
+                videoData.tags
+            );
+            updateSEODisplay({
+                seoScore: analysis.overallScore,
+                titleScore: analysis.titleScore,
+                descriptionScore: analysis.descriptionScore,
+                tagsScore: analysis.tagsScore,
+                suggestions: analysis.suggestions
+            });
         } else {
-            throw new Error(response?.error || 'Analysis failed');
+            // Fallback to simple analysis
+            updateSEODisplay({
+                seoScore: videoData.title ? 50 : 0,
+                suggestions: ['Configure API keys for detailed analysis', 'Add a compelling title', 'Write detailed description']
+            });
         }
         
     } catch (error) {
@@ -811,32 +1395,8 @@ async function initializeSEOAnalysis() {
         // Show fallback data
         updateSEODisplay({
             seoScore: 0,
-            suggestions: ['Unable to analyze. Please check your API keys in settings.']
+            suggestions: ['Unable to analyze. Please check video content.']
         });
-    }
-}
-
-/**
- * Get current video data from the page with defensive checks
- */
-function getCurrentVideoData() {
-    try {
-        const titleElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TITLE);
-        const descriptionElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_DESCRIPTION);
-        const tagsElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TAGS);
-        
-        return {
-            title: titleElement?.value || titleElement?.textContent || '',
-            description: descriptionElement?.value || descriptionElement?.textContent || '',
-            tags: tagsElement?.value || tagsElement?.textContent || '',
-            url: window.location.href,
-            timestamp: new Date().toISOString(),
-            pageType: window.OpenStudio.State.currentPage
-        };
-        
-    } catch (error) {
-        console.error('OpenStudio: Error getting video data:', error);
-        return null;
     }
 }
 
@@ -845,23 +1405,23 @@ function getCurrentVideoData() {
  */
 function updateSEODisplay(analysis) {
     try {
-        if (!window.OpenStudio.State.seoPanel || !analysis) return;
+        if (!state.seoPanel || !analysis) return;
         
         // Update main score
-        const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', window.OpenStudio.State.seoPanel);
+        const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', state.seoPanel);
         if (scoreElement) {
             scoreElement.textContent = analysis.seoScore || '--';
         }
         
         // Update suggestions with safe DOM manipulation
-        const suggestionsContainer = window.OpenStudio.DOM.safeQuerySelector('#seo-suggestions', window.OpenStudio.State.seoPanel);
+        const suggestionsContainer = window.OpenStudio.DOM.safeQuerySelector('#seo-suggestions', state.seoPanel);
         if (suggestionsContainer && analysis.suggestions) {
-                    // Clear existing content safely
-        while (suggestionsContainer.firstChild) {
-            suggestionsContainer.removeChild(suggestionsContainer.firstChild);
-        }
-        
-        if (Array.isArray(analysis.suggestions) && analysis.suggestions.length > 0) {
+            // Clear existing content safely
+            while (suggestionsContainer.firstChild) {
+                suggestionsContainer.removeChild(suggestionsContainer.firstChild);
+            }
+            
+            if (Array.isArray(analysis.suggestions) && analysis.suggestions.length > 0) {
                 const suggestionsList = window.OpenStudio.DOM.createElement('ul', { className: 'suggestions-list' });
                 
                 analysis.suggestions.forEach(suggestion => {
@@ -892,13 +1452,13 @@ function updateIndividualScores(analysis) {
     try {
         // Extract scores from analysis or use defaults
         const scores = {
-            title: analysis?.titleScore || calculateTitleScore(),
-            description: analysis?.descriptionScore || calculateDescriptionScore(),
-            tags: analysis?.tagsScore || calculateTagsScore()
+            title: analysis?.titleScore || '--',
+            description: analysis?.descriptionScore || '--',
+            tags: analysis?.tagsScore || '--'
         };
         
         Object.keys(scores).forEach(metric => {
-            const element = window.OpenStudio.DOM.safeQuerySelector(`#${metric}-score`, window.OpenStudio.State.seoPanel);
+            const element = window.OpenStudio.DOM.safeQuerySelector(`#${metric}-score`, state.seoPanel);
             if (element) {
                 element.textContent = scores[metric];
             }
@@ -910,286 +1470,37 @@ function updateIndividualScores(analysis) {
 }
 
 /**
- * Calculate title score based on current title
+ * Clear SEO data display
  */
-function calculateTitleScore() {
+function clearSEOData() {
     try {
-        const titleElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TITLE);
-        const title = titleElement?.value || titleElement?.textContent || '';
-        
-        if (!title) return 0;
-        
-        let score = 0;
-        
-        // Length check (optimal 50-60 characters)
-        if (title.length >= 30 && title.length <= 70) score += 30;
-        else if (title.length >= 20 && title.length <= 80) score += 20;
-        else score += 10;
-        
-        // Contains numbers (years, stats, etc.)
-        if (/\d/.test(title)) score += 10;
-        
-        // Contains emotional words
-        const emotionalWords = ['amazing', 'incredible', 'ultimate', 'best', 'worst', 'shocking'];
-        if (emotionalWords.some(word => title.toLowerCase().includes(word))) score += 15;
-        
-        // Contains brackets or parentheses
-        if (/[\[\]()]/.test(title)) score += 10;
-        
-        // All caps check (should be minimal)
-        const capsRatio = (title.match(/[A-Z]/g) || []).length / title.length;
-        if (capsRatio < 0.1) score += 15;
-        
-        return Math.min(score, 100);
-        
-    } catch (error) {
-        console.error('OpenStudio: Error calculating title score:', error);
-        return 0;
-    }
-}
-
-/**
- * Calculate description score
- */
-function calculateDescriptionScore() {
-    try {
-        const descElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_DESCRIPTION);
-        const description = descElement?.value || descElement?.textContent || '';
-        
-        if (!description) return 0;
-        
-        let score = 0;
-        
-        // Length check (optimal 125+ characters)
-        if (description.length >= 200) score += 30;
-        else if (description.length >= 125) score += 20;
-        else score += 10;
-        
-        // Contains links
-        if (/https?:\/\//.test(description)) score += 15;
-        
-        // Contains hashtags
-        if (/#\w+/.test(description)) score += 10;
-        
-        // Contains timestamps
-        if (/\d+:\d+/.test(description)) score += 10;
-        
-        // Multiple lines/paragraphs
-        if ((description.match(/\n/g) || []).length >= 2) score += 15;
-        
-        return Math.min(score, 100);
-        
-    } catch (error) {
-        console.error('OpenStudio: Error calculating description score:', error);
-        return 0;
-    }
-}
-
-/**
- * Calculate tags score
- */
-function calculateTagsScore() {
-    try {
-        const tagsElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TAGS);
-        const tags = tagsElement?.value || tagsElement?.textContent || '';
-        
-        if (!tags) return 0;
-        
-        const tagArray = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-        
-        let score = 0;
-        
-        // Number of tags (optimal 5-15)
-        if (tagArray.length >= 5 && tagArray.length <= 15) score += 40;
-        else if (tagArray.length >= 3 && tagArray.length <= 20) score += 25;
-        else score += 10;
-        
-        // Tag length variety
-        const avgLength = tagArray.reduce((sum, tag) => sum + tag.length, 0) / tagArray.length;
-        if (avgLength >= 3 && avgLength <= 15) score += 30;
-        
-        // Contains mix of single and multi-word tags
-        const singleWords = tagArray.filter(tag => !tag.includes(' ')).length;
-        const multiWords = tagArray.length - singleWords;
-        if (singleWords > 0 && multiWords > 0) score += 30;
-        
-        return Math.min(score, 100);
-        
-    } catch (error) {
-        console.error('OpenStudio: Error calculating tags score:', error);
-        return 0;
-    }
-}
-
-/**
- * Generate tag suggestions using AI
- */
-async function generateTagSuggestions() {
-    try {
-        showNotification('Generating tags...', 'info');
-        
-        const videoData = getCurrentVideoData();
-        if (!videoData || !videoData.title) {
-            throw new Error('No video title available for tag generation');
-        }
-        
-        const response = await chrome.runtime.sendMessage({
-            action: 'generateTags',
-            data: videoData
-        });
-        
-        if (response && response.success && response.tags) {
-            // Update tags field if available
-            const tagsElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TAGS);
-            if (tagsElement) {
-                const currentTags = tagsElement.value || '';
-                const newTags = response.tags.join(', ');
-                const combinedTags = currentTags ? `${currentTags}, ${newTags}` : newTags;
-                
-                tagsElement.value = combinedTags;
-                tagsElement.dispatchEvent(new Event('input', { bubbles: true }));
+        if (state.seoPanel) {
+            const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', state.seoPanel);
+            const suggestionsElement = window.OpenStudio.DOM.safeQuerySelector('#seo-suggestions', state.seoPanel);
+            
+            if (scoreElement) {
+                scoreElement.textContent = '--';
             }
             
-            showNotification(`Generated ${response.tags.length} tags successfully!`, 'success');
-        } else {
-            throw new Error(response?.error || 'Tag generation failed');
-        }
-        
-    } catch (error) {
-        console.error('OpenStudio: Tag generation failed:', error);
-        showNotification('Tag generation feature requires API configuration', 'warning');
-    }
-}
-
-/**
- * Optimize video title using AI
- */
-async function optimizeTitle() {
-    try {
-        showNotification('Optimizing title...', 'info');
-        
-        const videoData = getCurrentVideoData();
-        if (!videoData || !videoData.title) {
-            throw new Error('No video title available for optimization');
-        }
-        
-        const response = await chrome.runtime.sendMessage({
-            action: 'optimizeTitle',
-            data: videoData
-        });
-        
-        if (response && response.success && response.optimizedTitle) {
-            const titleElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_TITLE);
-            if (titleElement) {
-                titleElement.value = response.optimizedTitle;
-                titleElement.dispatchEvent(new Event('input', { bubbles: true }));
-                showNotification('Title optimized successfully!', 'success');
+            if (suggestionsElement) {
+                // Clear content safely
+                while (suggestionsElement.firstChild) {
+                    suggestionsElement.removeChild(suggestionsElement.firstChild);
+                }
+                const disabledMessage = window.OpenStudio.DOM.createElement('p', { className: 'analyzing' }, 'SEO Assistant disabled');
+                window.OpenStudio.DOM.safeAppendChild(suggestionsElement, disabledMessage);
             }
-        } else {
-            throw new Error(response?.error || 'Title optimization failed');
+            
+            // Clear individual scores
+            ['title-score', 'description-score', 'tags-score'].forEach(id => {
+                const element = window.OpenStudio.DOM.safeQuerySelector(`#${id}`, state.seoPanel);
+                if (element) {
+                    element.textContent = '--';
+                }
+            });
         }
-        
     } catch (error) {
-        console.error('OpenStudio: Title optimization failed:', error);
-        showNotification('Title optimization feature requires API configuration', 'warning');
-    }
-}
-
-/**
- * Enhance video description using AI
- */
-async function enhanceDescription() {
-    try {
-        showNotification('Enhancing description...', 'info');
-        
-        const videoData = getCurrentVideoData();
-        if (!videoData) {
-            throw new Error('No video data available for description enhancement');
-        }
-        
-        const response = await chrome.runtime.sendMessage({
-            action: 'enhanceDescription',
-            data: videoData
-        });
-        
-        if (response && response.success && response.enhancedDescription) {
-            const descElement = window.OpenStudio.DOM.safeQuerySelector(window.OpenStudio.SELECTORS.VIDEO_DESCRIPTION);
-            if (descElement) {
-                descElement.value = response.enhancedDescription;
-                descElement.dispatchEvent(new Event('input', { bubbles: true }));
-                showNotification('Description enhanced successfully!', 'success');
-            }
-        } else {
-            throw new Error(response?.error || 'Description enhancement failed');
-        }
-        
-    } catch (error) {
-        console.error('OpenStudio: Description enhancement failed:', error);
-        showNotification('Description enhancement feature requires API configuration', 'warning');
-    }
-}
-
-/**
- * Show notification to user (CSP-compliant)
- */
-function showNotification(message, type = 'info') {
-    try {
-        // Remove existing notifications
-        const existingNotifications = document.querySelectorAll('.openstudio-notification');
-        existingNotifications.forEach(notification => {
-            window.OpenStudio.DOM.safeRemoveElement(notification);
-        });
-        
-        const notification = window.OpenStudio.DOM.createElement('div', {
-            className: `openstudio-notification notification-${type}`
-        }, message);
-        
-        if (!notification) return;
-        
-        // Style the notification
-        Object.assign(notification.style, {
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '12px 20px',
-            borderRadius: '4px',
-            zIndex: '10000',
-            fontSize: '14px',
-            fontWeight: '500',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-            maxWidth: '300px',
-            wordWrap: 'break-word'
-        });
-        
-        // Set color based on type
-        switch (type) {
-            case 'success':
-                notification.style.backgroundColor = '#4caf50';
-                notification.style.color = 'white';
-                break;
-            case 'error':
-                notification.style.backgroundColor = '#f44336';
-                notification.style.color = 'white';
-                break;
-            case 'warning':
-                notification.style.backgroundColor = '#ff9800';
-                notification.style.color = 'white';
-                break;
-            default:
-                notification.style.backgroundColor = '#2196f3';
-                notification.style.color = 'white';
-        }
-        
-        window.OpenStudio.DOM.safeAppendChild(document.body, notification);
-        
-        // Auto-remove after timeout
-        setTimeout(() => {
-            window.OpenStudio.DOM.safeRemoveElement(notification);
-        }, window.OpenStudio.TIMING.NOTIFICATION_TIMEOUT);
-        
-    } catch (error) {
-        console.error('OpenStudio: Error showing notification:', error);
-        console.log('OpenStudio:', message);
+        console.error('OpenStudio: Error clearing SEO data:', error);
     }
 }
 
@@ -1199,9 +1510,9 @@ function showNotification(message, type = 'info') {
 function getCurrentPageData() {
     try {
         return {
-            pageType: window.OpenStudio.State.currentPage,
+            pageType: state.currentPage,
             currentVideo: getCurrentVideoData(),
-            isInjected: window.OpenStudio.State.isInjected,
+            isInjected: state.isInjected,
             timestamp: new Date().toISOString(),
             version: '1.0.2-enterprise'
         };
@@ -1221,14 +1532,14 @@ function getCurrentPageData() {
  */
 function triggerSEOAnalysis() {
     try {
-        if (window.OpenStudio.State.isInjected && window.OpenStudio.State.seoPanel) {
+        if (state.isInjected && state.seoPanel) {
             initializeSEOAnalysis();
         } else {
-            showNotification('SEO Assistant not available on this page', 'warning');
+            showNotification('⚠️ SEO Assistant not available on this page', 'warning');
         }
     } catch (error) {
         console.error('OpenStudio: Error triggering SEO analysis:', error);
-        showNotification('Failed to trigger SEO analysis', 'error');
+        showNotification('❌ Failed to trigger SEO analysis', 'error');
     }
 }
 
@@ -1237,8 +1548,8 @@ function triggerSEOAnalysis() {
  */
 function updateSEOScore(score) {
     try {
-        if (window.OpenStudio.State.seoPanel) {
-            const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', window.OpenStudio.State.seoPanel);
+        if (state.seoPanel) {
+            const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', state.seoPanel);
             if (scoreElement) {
                 scoreElement.textContent = score || '--';
             }
@@ -1249,83 +1560,12 @@ function updateSEOScore(score) {
 }
 
 /**
- * Clear SEO data display
- */
-function clearSEOData() {
-    try {
-        if (window.OpenStudio.State.seoPanel) {
-            const scoreElement = window.OpenStudio.DOM.safeQuerySelector('#seo-score', window.OpenStudio.State.seoPanel);
-            const suggestionsElement = window.OpenStudio.DOM.safeQuerySelector('#seo-suggestions', window.OpenStudio.State.seoPanel);
-            
-            if (scoreElement) {
-                scoreElement.textContent = '--';
-            }
-            
-            if (suggestionsElement) {
-                // Clear content safely
-                while (suggestionsElement.firstChild) {
-                    suggestionsElement.removeChild(suggestionsElement.firstChild);
-                }
-                const disabledMessage = window.OpenStudio.DOM.createElement('p', { className: 'analyzing' }, 'SEO Assistant disabled');
-                window.OpenStudio.DOM.safeAppendChild(suggestionsElement, disabledMessage);
-            }
-            
-            // Clear individual scores
-            ['title-score', 'description-score', 'tags-score'].forEach(id => {
-                const element = window.OpenStudio.DOM.safeQuerySelector(`#${id}`, window.OpenStudio.State.seoPanel);
-                if (element) {
-                    element.textContent = '--';
-                }
-            });
-        }
-    } catch (error) {
-        console.error('OpenStudio: Error clearing SEO data:', error);
-    }
-}
-
-/**
- * Inject UI for upload page
- */
-async function injectUploadUI() {
-    try {
-        console.log('OpenStudio: Upload page UI injection not yet implemented');
-        // TODO: Implement upload page UI injection
-    } catch (error) {
-        console.error('OpenStudio: Error injecting upload UI:', error);
-    }
-}
-
-/**
- * Inject UI for analytics page
- */
-async function injectAnalyticsUI() {
-    try {
-        console.log('OpenStudio: Analytics page UI injection not yet implemented');
-        // TODO: Implement analytics page UI injection
-    } catch (error) {
-        console.error('OpenStudio: Error injecting analytics UI:', error);
-    }
-}
-
-/**
- * Inject UI for dashboard page
- */
-async function injectDashboardUI() {
-    try {
-        console.log('OpenStudio: Dashboard page UI injection not yet implemented');
-        // TODO: Implement dashboard page UI injection
-    } catch (error) {
-        console.error('OpenStudio: Error injecting dashboard UI:', error);
-    }
-}
-
-/**
  * Clean up previous injection
  */
 function cleanupInjection() {
     try {
-        if (window.OpenStudio.State.seoPanel) {
-            window.OpenStudio.DOM.safeRemoveElement(window.OpenStudio.State.seoPanel);
+        if (state.seoPanel) {
+            window.OpenStudio.DOM.safeRemoveElement(state.seoPanel);
         }
         
         // Remove styles if no panels exist
@@ -1337,13 +1577,28 @@ function cleanupInjection() {
             }
         }
         
-        window.OpenStudio.State.isInjected = false;
-        window.OpenStudio.State.seoPanel = null;
-        window.OpenStudio.State.retryCount = 0;
+        state.isInjected = false;
+        state.seoPanel = null;
+        state.retryCount = 0;
         
     } catch (error) {
         console.error('OpenStudio: Error cleaning up injection:', error);
     }
+}
+
+/**
+ * Placeholder injection functions for other page types
+ */
+async function injectUploadUI() {
+    console.log('OpenStudio: Upload page UI injection not yet implemented');
+}
+
+async function injectAnalyticsUI() {
+    console.log('OpenStudio: Analytics page UI injection not yet implemented');
+}
+
+async function injectDashboardUI() {
+    console.log('OpenStudio: Dashboard page UI injection not yet implemented');
 }
 
 // Initialize when script loads with proper error handling

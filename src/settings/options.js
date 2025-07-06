@@ -248,8 +248,8 @@ async function loadApiKeys() {
                 elements.youtubeApiKey.value = keys.youtube;
             }
             
-            if (keys.gemini) {
-                elements.geminiApiKey.value = keys.gemini;
+            if (keys.geminiApiKey) {
+                elements.geminiApiKey.value = keys.geminiApiKey;
             }
         }
     } catch (error) {
@@ -303,10 +303,10 @@ async function saveSettings(silent = false) {
         // Save settings
         const settingsResponse = await sendMessageToBackground('saveSettings', { settings });
         
-        // Collect and save API keys
+        // Collect and save API keys with proper camelCase naming
         const apiKeys = {
             youtube: elements.youtubeApiKey?.value?.trim() ?? '',
-            gemini: elements.geminiApiKey?.value?.trim() ?? ''
+            geminiApiKey: elements.geminiApiKey?.value?.trim() ?? ''
         };
         
         
