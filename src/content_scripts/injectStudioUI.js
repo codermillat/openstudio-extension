@@ -23,6 +23,27 @@ const state = {
     retryCount: 0
 };
 
+// Cache for video data to prevent excessive DOM queries
+const videoDataCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000, // 5 seconds TTL
+    isValid() {
+        return this.data && (Date.now() - this.timestamp) < this.ttl;
+    },
+    set(data) {
+        this.data = data;
+        this.timestamp = Date.now();
+    },
+    get() {
+        return this.isValid() ? this.data : null;
+    },
+    clear() {
+        this.data = null;
+        this.timestamp = 0;
+    }
+};
+
 // Initialize content script with comprehensive error handling
 function initializeContentScript() {
     try {
@@ -259,6 +280,14 @@ function setupPageMonitoring() {
             subtree: true
         });
         
+        // Add form field change detection to invalidate cache
+        document.addEventListener('input', (e) => {
+            if (e.target.matches('input, textarea, [contenteditable="true"]')) {
+                videoDataCache.clear();
+                console.log('🔍 OpenStudio: Video data cache cleared due to form change');
+            }
+        });
+        
     } catch (error) {
         console.error('OpenStudio: Error setting up page monitoring:', error);
     }
@@ -436,9 +465,19 @@ async function injectVideoEditUI() {
  */
 function getCurrentVideoData() {
     try {
-        // Enhanced selectors with comprehensive debugging
+        // Check cache first
+        const cachedData = videoDataCache.get();
+        if (cachedData) {
+            console.log('🔍 OpenStudio: Using cached video data');
+            return cachedData;
+        }
+        
+        console.log('🔍 OpenStudio: Fetching fresh video data...');
+        // Fixed selectors based on debug findings - YouTube Studio uses contenteditable
         const titleSelectors = [
-            'ytcp-social-suggestion-input input',  // Primary current selector
+            // Look for contenteditable that's likely to be title (shorter content, first occurrence)
+            '[contenteditable="true"]',
+            'ytcp-social-suggestion-input input',
             'textarea[aria-label*="title" i]',
             '#video-title',
             'input[placeholder*="title" i]',
@@ -446,52 +485,72 @@ function getCurrentVideoData() {
             '[data-testid*="title"] input',
             '[data-testid*="title"] textarea',
             '.ytcp-video-title input',
-            '.ytcp-video-title textarea',
-            // Additional comprehensive selectors
-            'input[type="text"]',
-            'textarea',
-            '[contenteditable="true"]',
-            '.ytcp-form-input-container input',
-            '.ytcp-form-input-container textarea'
+            '.ytcp-video-title textarea'
         ];
         
         const descriptionSelectors = [
-            'ytcp-mention-textbox textarea',  // Primary current selector
+            // Look for contenteditable that's likely to be description (longer content)  
+            'div[contenteditable="true"]',
+            'ytcp-mention-textbox textarea',
             'textarea[aria-label*="description" i]',
             '#video-description',
             'textarea[placeholder*="description" i]',
             '[data-testid*="description"] textarea',
             '.ytcp-video-description textarea',
             'textarea[rows]',
-            // Additional comprehensive selectors
-            'div[contenteditable="true"]',
             '.ytcp-mention-textbox',
             '[role="textbox"]'
         ];
         
         const tagSelectors = [
-            'ytcp-form-input-container[internalname="keywords"] input',  // Primary current selector
-            'input[aria-label*="tags" i]',
+            // Primary selectors for current YouTube Studio (2024-2025)
+            'input[aria-describedby*="tags"]',
+            'input[data-testid*="tags"]',
+            'input[placeholder*="tag" i]',
+            'input[placeholder*="keyword" i]',
+            'input[aria-label*="tag" i]',
+            'input[aria-label*="keyword" i]',
+            // Legacy and fallback selectors
+            'ytcp-form-input-container[internalname="keywords"] input',
             '#video-tags',
-            'input[placeholder*="tags" i]',
             '[data-testid*="tags"] input',
             '.ytcp-video-tags input',
-            // Additional comprehensive selectors
-            'input[type="text"][placeholder*="tag" i]',
-            'ytcp-chip-bar input'
+            'ytcp-chip-bar input',
+            '.ytcp-chip-bar input',
+            'ytcp-form-tags input',
+            // Pattern-based detection for new layouts
+            'input[type="text"]', // Will be filtered by context
+            '[class*="tag"] input',
+            '[class*="keyword"] input',
+            '[class*="chip"] input',
+            // Broader search for any input in a tags context
+            '[role="textbox"][aria-label*="tag" i]',
+            'input[name*="tag" i]',
+            'input[id*="tag" i]'
         ];
 
         console.log('🔍 OpenStudio: Starting field detection debug...');
         
-        // Debug: Log all available form elements
+        // Debug: Log all available form elements with detailed info
         const allInputs = document.querySelectorAll('input, textarea, [contenteditable="true"]');
         console.log(`🔍 OpenStudio: Found ${allInputs.length} total input/textarea elements on page`);
         
-        // Try to find title field with detailed logging
+        // Enhanced debugging - show first 10 inputs with all attributes
+        Array.from(allInputs).slice(0, 10).forEach((input, index) => {
+            const attrs = Array.from(input.attributes).map(attr => `${attr.name}="${attr.value}"`).join(' ');
+            const content = (input.value || input.textContent || input.placeholder || '').substring(0, 50);
+            console.log(`🔍 Input ${index + 1}: <${input.tagName.toLowerCase()} ${attrs}> content="${content}"`);
+        });
+        
+        // Smart detection for contenteditable fields - need to distinguish title from description
         let titleElement = null;
         let titleSelectorUsed = null;
+        let descriptionElement = null;
+        let descriptionSelectorUsed = null;
+        
+        // First try specific non-contenteditable selectors
         console.log('🔍 OpenStudio: Searching for title field...');
-        for (let i = 0; i < titleSelectors.length; i++) {
+        for (let i = 1; i < titleSelectors.length; i++) { // Skip first contenteditable selector
             const selector = titleSelectors[i];
             const element = document.querySelector(selector);
             console.log(`🔍 Title selector ${i + 1}/${titleSelectors.length}: "${selector}" -> ${element ? '✅ FOUND' : '❌ not found'}`);
@@ -503,11 +562,8 @@ function getCurrentVideoData() {
             }
         }
         
-        // Try to find description field with detailed logging
-        let descriptionElement = null;
-        let descriptionSelectorUsed = null;
         console.log('🔍 OpenStudio: Searching for description field...');
-        for (let i = 0; i < descriptionSelectors.length; i++) {
+        for (let i = 1; i < descriptionSelectors.length; i++) { // Skip first contenteditable selector
             const selector = descriptionSelectors[i];
             const element = document.querySelector(selector);
             console.log(`🔍 Description selector ${i + 1}/${descriptionSelectors.length}: "${selector}" -> ${element ? '✅ FOUND' : '❌ not found'}`);
@@ -520,10 +576,52 @@ function getCurrentVideoData() {
             }
         }
         
-        // Try to find tags field with detailed logging
+        // If no specific selectors worked, try smart contenteditable detection
+        if (!titleElement || !descriptionElement) {
+            console.log('🔍 OpenStudio: Using smart contenteditable detection...');
+            const editableElements = document.querySelectorAll('[contenteditable="true"]');
+            console.log(`🔍 Found ${editableElements.length} contenteditable elements`);
+            
+            if (editableElements.length >= 2) {
+                // Assume first contenteditable is title, second is description
+                if (!titleElement) {
+                    titleElement = editableElements[0];
+                    titleSelectorUsed = '[contenteditable="true"]:first-of-type';
+                    console.log(`🔍 Title from contenteditable[0]: "${titleElement.textContent || 'EMPTY'}"`);
+                }
+                
+                if (!descriptionElement) {
+                    descriptionElement = editableElements[1];
+                    descriptionSelectorUsed = '[contenteditable="true"]:nth-of-type(2)';
+                    console.log(`🔍 Description from contenteditable[1]: "${(descriptionElement.textContent || 'EMPTY').substring(0, 100)}..."`);
+                }
+            } else if (editableElements.length === 1) {
+                // Only one contenteditable found - determine if it's title or description by content length
+                const content = editableElements[0].textContent || '';
+                if (content.length < 150) {
+                    // Likely title (shorter content)
+                    if (!titleElement) {
+                        titleElement = editableElements[0];
+                        titleSelectorUsed = '[contenteditable="true"] (detected as title by length)';
+                        console.log(`🔍 Title from single contenteditable: "${content}"`);
+                    }
+                } else {
+                    // Likely description (longer content)
+                    if (!descriptionElement) {
+                        descriptionElement = editableElements[0];
+                        descriptionSelectorUsed = '[contenteditable="true"] (detected as description by length)';
+                        console.log(`🔍 Description from single contenteditable: "${content.substring(0, 100)}..."`);
+                    }
+                }
+            }
+        }
+        
+        // Try to find tags field with detailed logging and smart fallback
         let tagsElement = null;
         let tagsSelectorUsed = null;
         console.log('🔍 OpenStudio: Searching for tags field...');
+        
+        // First, try specific tag selectors
         for (let i = 0; i < tagSelectors.length; i++) {
             const selector = tagSelectors[i];
             const element = document.querySelector(selector);
@@ -533,6 +631,66 @@ function getCurrentVideoData() {
                 tagsSelectorUsed = selector;
                 console.log(`🔍 Tags field value: "${element.value || element.textContent || element.innerText || 'EMPTY'}"`);
                 break;
+            }
+        }
+        
+        // Smart fallback: Look for inputs that are likely to be tags based on context
+        if (!tagsElement) {
+            console.log('🔍 OpenStudio: Trying smart tags detection...');
+            const allTextInputs = document.querySelectorAll('input[type="text"], input:not([type])');
+            
+            for (const input of allTextInputs) {
+                // Skip if it's already identified as title or description
+                if (input === titleElement || input === descriptionElement) continue;
+                
+                // Check parent containers for tags-related keywords
+                const container = input.closest('div, section, form, [class*="tag"], [class*="keyword"], [class*="chip"]');
+                if (container) {
+                    const containerText = container.textContent?.toLowerCase() || '';
+                    const containerClass = container.className?.toLowerCase() || '';
+                    const containerHtml = container.outerHTML?.toLowerCase() || '';
+                    
+                    if (containerText.includes('tag') || containerText.includes('keyword') || 
+                        containerClass.includes('tag') || containerClass.includes('keyword') ||
+                        containerHtml.includes('tag') || containerHtml.includes('keyword')) {
+                        
+                        tagsElement = input;
+                        tagsSelectorUsed = 'Smart detection (container context)';
+                        console.log(`🔍 Tags field found via smart detection: ${input.outerHTML.substring(0, 100)}...`);
+                        break;
+                    }
+                }
+                
+                // Check if input has tags-related attributes
+                const placeholder = input.placeholder?.toLowerCase() || '';
+                const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+                const id = input.id?.toLowerCase() || '';
+                const name = input.name?.toLowerCase() || '';
+                
+                if (placeholder.includes('tag') || placeholder.includes('keyword') ||
+                    ariaLabel.includes('tag') || ariaLabel.includes('keyword') ||
+                    id.includes('tag') || id.includes('keyword') ||
+                    name.includes('tag') || name.includes('keyword')) {
+                    
+                    tagsElement = input;
+                    tagsSelectorUsed = 'Smart detection (attribute context)';
+                    console.log(`🔍 Tags field found via attribute detection: ${input.outerHTML.substring(0, 100)}...`);
+                    break;
+                }
+            }
+        }
+        
+        // Last resort: Look for empty text inputs that might be tags
+        if (!tagsElement) {
+            console.log('🔍 OpenStudio: Trying last resort tags detection...');
+            const emptyInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'))
+                .filter(input => !input.value && input !== titleElement && input !== descriptionElement);
+            
+            if (emptyInputs.length > 0) {
+                // Take the first unused text input as potential tags field
+                tagsElement = emptyInputs[0];
+                tagsSelectorUsed = 'Last resort (empty input)';
+                console.log(`🔍 Tags field found via last resort: ${tagsElement.outerHTML.substring(0, 100)}...`);
             }
         }
 
@@ -545,24 +703,13 @@ function getCurrentVideoData() {
         // If no fields found, let's explore the page structure
         if (!titleElement && !descriptionElement && !tagsElement) {
             console.log('🔍 OpenStudio: No fields found! Exploring page structure...');
-            
-            // Look for ytcp elements
-            const ytcpElements = document.querySelectorAll('[class*="ytcp"]');
-            console.log(`🔍 Found ${ytcpElements.length} elements with "ytcp" in class name`);
-            
-            // Look for form containers
-            const formContainers = document.querySelectorAll('form, [class*="form"], [class*="input"], [class*="field"]');
-            console.log(`🔍 Found ${formContainers.length} potential form containers`);
-            
-            // Log some form elements for inspection
-            const sampleInputs = Array.from(allInputs).slice(0, 5);
-            sampleInputs.forEach((input, index) => {
-                const classes = input.className || 'no-class';
-                const id = input.id || 'no-id';
-                const placeholder = input.placeholder || 'no-placeholder';
-                const type = input.type || input.tagName.toLowerCase();
-                console.log(`🔍 Sample input ${index + 1}: <${type}> id="${id}" class="${classes}" placeholder="${placeholder}"`);
-            });
+            explorePageStructure();
+        }
+        
+        // Additional debugging if only tags is missing
+        if ((titleElement || descriptionElement) && !tagsElement) {
+            console.log('🔍 OpenStudio: Tags field missing, analyzing page for clues...');
+            analyzePageForTags();
         }
         
         // Log warnings for missing fields
@@ -576,7 +723,7 @@ function getCurrentVideoData() {
             console.warn('OpenStudio: Missing video tags field');
         }
         
-        return {
+        const videoData = {
             title: titleElement?.value || titleElement?.textContent || '',
             description: descriptionElement?.value || descriptionElement?.textContent || '',
             tags: tagsElement?.value || tagsElement?.textContent || '',
@@ -590,6 +737,11 @@ function getCurrentVideoData() {
             }
         };
         
+        // Cache the result
+        videoDataCache.set(videoData);
+        
+        return videoData;
+        
     } catch (error) {
         console.error('OpenStudio: Error getting video data:', error);
         return {
@@ -601,6 +753,88 @@ function getCurrentVideoData() {
             pageType: state.currentPage,
             error: error.message
         };
+    }
+}
+
+/**
+ * Comprehensive page structure exploration for debugging
+ */
+function explorePageStructure() {
+    try {
+        const allInputs = document.querySelectorAll('input, textarea, [contenteditable="true"]');
+        
+        // Look for ytcp elements
+        const ytcpElements = document.querySelectorAll('[class*="ytcp"]');
+        console.log(`🔍 Found ${ytcpElements.length} elements with "ytcp" in class name`);
+        
+        // Look for form containers
+        const formContainers = document.querySelectorAll('form, [class*="form"], [class*="input"], [class*="field"]');
+        console.log(`🔍 Found ${formContainers.length} potential form containers`);
+        
+        // Log some form elements for inspection
+        const sampleInputs = Array.from(allInputs).slice(0, 5);
+        sampleInputs.forEach((input, index) => {
+            const classes = input.className || 'no-class';
+            const id = input.id || 'no-id';
+            const placeholder = input.placeholder || 'no-placeholder';
+            const type = input.type || input.tagName.toLowerCase();
+            console.log(`🔍 Sample input ${index + 1}: <${type}> id="${id}" class="${classes}" placeholder="${placeholder}"`);
+        });
+        
+        // Look for any elements with "tag" or "keyword" in their text content
+        const potentialTagContainers = Array.from(document.querySelectorAll('*')).filter(el => {
+            const text = el.textContent?.toLowerCase() || '';
+            return text.includes('tag') || text.includes('keyword');
+        }).slice(0, 5);
+        
+        console.log(`🔍 Found ${potentialTagContainers.length} elements with tag/keyword text`);
+        potentialTagContainers.forEach((el, index) => {
+            console.log(`🔍 Tag container ${index + 1}: ${el.tagName} "${el.textContent?.substring(0, 50)}..."`);
+        });
+        
+    } catch (error) {
+        console.error('🔍 Error exploring page structure:', error);
+    }
+}
+
+/**
+ * Analyze page specifically for tags field clues
+ */
+function analyzePageForTags() {
+    try {
+        // Look for sections that might contain tags
+        const sections = document.querySelectorAll('section, div[class*="section"], div[class*="container"]');
+        
+        for (const section of sections) {
+            const sectionText = section.textContent?.toLowerCase() || '';
+            const sectionHtml = section.outerHTML?.toLowerCase() || '';
+            
+            if (sectionText.includes('tag') || sectionText.includes('keyword') || 
+                sectionHtml.includes('tag') || sectionHtml.includes('keyword')) {
+                
+                console.log('🔍 Potential tags section found:');
+                console.log(`   Text: "${sectionText.substring(0, 100)}..."`);
+                
+                // Look for inputs in this section
+                const inputsInSection = section.querySelectorAll('input, textarea');
+                console.log(`   Contains ${inputsInSection.length} input elements`);
+                
+                inputsInSection.forEach((input, index) => {
+                    console.log(`   Input ${index + 1}: ${input.outerHTML.substring(0, 100)}...`);
+                });
+                
+                break; // Found potential section, don't spam console
+            }
+        }
+        
+        // Check if tags section might be collapsed or hidden
+        const hiddenInputs = document.querySelectorAll('input[style*="display: none"], input[hidden]');
+        if (hiddenInputs.length > 0) {
+            console.log(`🔍 Found ${hiddenInputs.length} hidden inputs that might be tags`);
+        }
+        
+    } catch (error) {
+        console.error('🔍 Error analyzing page for tags:', error);
     }
 }
 
@@ -1586,30 +1820,4 @@ function cleanupInjection() {
     }
 }
 
-/**
- * Placeholder injection functions for other page types
- */
-async function injectUploadUI() {
-    console.log('OpenStudio: Upload page UI injection not yet implemented');
-}
-
-async function injectAnalyticsUI() {
-    console.log('OpenStudio: Analytics page UI injection not yet implemented');
-}
-
-async function injectDashboardUI() {
-    console.log('OpenStudio: Dashboard page UI injection not yet implemented');
-}
-
-// Initialize when script loads with proper error handling
-try {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeContentScript);
-    } else {
-        initializeContentScript();
-    }
-} catch (error) {
-    console.error('OpenStudio: Fatal error during initialization:', error);
-}
-
-})();
+})(); // End IIFE
